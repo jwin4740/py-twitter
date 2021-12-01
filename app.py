@@ -16,15 +16,22 @@ class SimpleTwitter:
         self.api = tweepy.Client(bearer_token=bearer_token, consumer_key=api_key, consumer_secret=api_secret,
                                  access_token=access_token, access_token_secret=access_token_secret)
 
-    def get_user(self, username):
-        return self.api.get_user(username=username)
+    def get_user(self):
+        return self.api.get_user(username=USERNAME)
 
-    def get_user_tweets(self, user_id):
+    def get_user_tweets(self):
         return self.api.get_users_tweets(id=USER_ID)
+
+    def tweet(self):
+        try:
+            self.api.create_tweet(text='this is a test tweet')
+            print('successfully created tweet')
+        except Exception as E:
+            print(E)
 
 
 client = SimpleTwitter()
-print(client.get_user(USERNAME))
+# client.tweet()
 
 # public_tweets = api.home_timeline()
 # for tweet in public_tweets:
