@@ -17,3 +17,6 @@ tweepy==4.4.0
 typing-inspect==0.7.1
 typing_extensions==4.0.1
 urllib3==1.26.7
+
+psycopg~=3.0.5
+mysql-connector-python~=8.0.27
