@@ -8,8 +8,8 @@ def start_db(host, user, passwd):
     conn = mysql.connector.connect(
         host=host,
         user=user,
-        password=passwd)
-    conn.connect()
+        password=passwd, database='py_twitter')
+
     return conn
 
     print(mydb)
