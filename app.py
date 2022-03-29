@@ -1,10 +1,12 @@
 from collections import namedtuple
 from typing import List, Tuple
 from utils import *
-import sys
+from datetime import datetime
+import time
 
 import tweepy
 from decouple import config
+import json
 
 # cnx = mysql.connector.connect(user='scott', password='password',
 #                               host='127.0.0.1',
@@ -19,10 +21,19 @@ access_token_secret = config('ACCESS_TOKEN_SECRET')
 DB_HOST = config('DB_HOST')
 DB_USER = config('DB_USERNAME')
 DB_PASSWORD = config('DB_PASSWORD')
-USERNAME = 'veritanonbugia'
-USER_ID = 1457371398507220993
+VERITA_USERNAME = 'veritanonbugia'
+VERITA_USER_ID = 1457371398507220993
+VERITA_PINNED_TWEET_ID = '1504832968883322909'
+
+MAVX_USERNAME = 'ErickMavx'
+MAVX_USER_ID = 1507745273321242635
+MAVX_PINNED_TWEET_ID = '1507747124544512010'
 
 UserPinnedResponse = namedtuple("UserPinnedResponse", ("user_id", "username", "pinned_tweet"))
+
+MAVX_TEXT = f"Even as little as a $2 donation can help fund our clinical trial on the effect of Covid vaccines on human health.\n\nNo government agency will help with this study. We need YOUR help!!! Please donate and retweet.\n\nhttps://givesendgo.com/TheMavxerickStudy"
+BULLY_TEXT = f"Anyone who still wears a mask should be bullied, this is beyond ridiculous."
+BIO_WEAPON = f"We need to stop using the term \"vaccine\", this is a lipid nano particle encapsulated bioweapon"
 
 
 def select():
@@ -58,14 +69,21 @@ class SimpleTwitter:
         self.api = tweepy.Client(bearer_token=bearer_token, consumer_key=api_key, consumer_secret=api_secret,
                                  access_token=access_token, access_token_secret=access_token_secret)
 
-    def get_user_id_with_pinned_tweet(self, username='veritanonbugia') -> UserPinnedResponse:
-        res: tweepy.Response = self.api.get_user(username=username, expansions='pinned_tweet_id')
-        d = {'user_id': res.data.id, 'username': res.data.username, 'pinned_tweet': res.includes['tweets'][0]}
+    def get_user_id_with_pinned_tweet(self, username='veritanonbugia'):
+        d = ''
+        try:
+            res: tweepy.Response = self.api.get_user(username=username, expansions='pinned_tweet_id')
+            d = {'user_id': res.data.id, 'username': res.data.username, 'pinned_tweet': res.includes['tweets'][0]}
+            print(d['pinned_tweet']['data']['id'])
+        except Exception as E:
+            with open('mavx.log', 'a') as f:
+
+                f.write(f"{datetime.now()} error {E} fetching pinned tweet {username}\n")
 
         return d
 
     # gets 10 most recent tweets
-    def get_user_tweets(self, user_id=1457371398507220993):
+    def get_user_tweets(self, user_id=VERITA_USER_ID):
         user_tweets = self.api.get_users_tweets(id=user_id, max_results=5)
         return user_tweets
 
@@ -79,13 +97,62 @@ class SimpleTwitter:
         except Exception as E:
             print(E)
 
-    def tweet_pinned(self, raw_text, pinned_id):
+    def tweet_reply(self, t_id, msg_text):
+
+        self.api.create_tweet(text=msg_text, in_reply_to_tweet_id=t_id)
+        print('successful reply tweet')
+
+    def get_followers(self, user_id=VERITA_USER_ID):
+        next_token = True
+        pagination_token = None
+        followers_list = []
+        while next_token is True:
+            followers = self.api.get_users_followers(user_id, pagination_token=pagination_token)
+            flw_list = followers.data
+            for follower in flw_list:
+                followers_list.append(follower)
+            try:
+                pagination_token = followers.meta['next_token']
+
+            except Exception as E:
+                next_token = False
+                print(E)
+        return followers_list
+
+    def tweet_pinned(self, raw_text, pinned_id, user_name):
         try:
             self.api.create_tweet(text=raw_text, in_reply_to_tweet_id=pinned_id)
             print('successfully created tweet')
+            with open('mavx.log', 'a') as f:
+                text_strip = MAVX_TEXT.replace('\n', ' ')
+                f.write(f"{datetime.now()} POSTED {text_strip} TO {user_name}\n")
 
         except Exception as E:
-            print(E)
+            with open('mavx.log', 'a') as f:
+                f.write(f"{datetime.now()} {E} POSTING TO {user_name}\n")
+
+    def search_tweets_by_keyword(self, keyword):
+
+        next_token = True
+        pagination_token = None
+        tweet_list = []
+        max_tweets = 1000
+        while next_token is True:
+
+            res = self.api.search_recent_tweets(keyword, next_token=pagination_token)
+            print('successfully fetched batch')
+
+            tw_list = res.data
+            for follower in tw_list:
+                tweet_list.append(follower)
+            try:
+                pagination_token = res.meta['next_token']
+                if len(tweet_list) > max_tweets:
+                    next_token = False
+            except Exception as E:
+                next_token = False
+                print(E)
+        return tweet_list
 
     @staticmethod
     def create_tweet(raw_text: List) -> Tuple:
@@ -105,15 +172,69 @@ class SimpleTwitter:
 #
 client = SimpleTwitter()
 
-# usr = client.get_user_id_with_pinned_tweet()
-# print(usr.includes)
 
-# twts = client.get_user_tweets()
+# usr = client.get_user_id_with_pinned_tweet('SuePear85834959')
+
+# twts = client.get_user_tweets(MAVX_USER_ID)
 # print(len(twts))
 # print(twts)
-# client.tweet(return_text_hashtags())
-client.tweet_pinned('test', '1504832968883322909')
+
+
+# client.tweet_pinned(MAVX_TEXT, VERITA_PINNED_TWEET_ID)
+
+# client.get_user_id_with_pinned_tweet('sbhank')
+# sbhank pinned tweet '1241409878448467970'
 
 # public_tweets = api.home_timeline()
 # for tweet in public_tweets:
 #     print(tweet.text)
+def execute():
+    fl_list = client.get_followers()
+    print(fl_list)
+    pinned_tweet_id = ''
+    for follower in fl_list:
+        follow_data = {
+            'username': follower.username,
+            'id': follower.id
+        }
+        print(follow_data)
+        try:
+            time.sleep(3)
+            res = client.get_user_id_with_pinned_tweet(follow_data['username'])
+            if res == '':
+                continue
+            pinned_tweet_id = res['pinned_tweet']['data']['id']
+        except Exception as E:
+            with open('mavx.log', 'a') as f:
+                f.write(f"{datetime.now()} {E} POSTING TO {follow_data['username']}\n")
+        try:
+            time.sleep(3)
+
+            client.tweet_pinned(BULLY_TEXT, pinned_tweet_id, follow_data['username'])
+        except Exception as E:
+            with open('mavx.log', 'a') as f:
+                f.write(f"{datetime.now()} {E} POSTING TO {follow_data['username']}\n")
+
+
+def getTweetsByKeyword():
+    kw = 'vaccine'
+    tweets = client.search_tweets_by_keyword(kw)
+    skipper = 0
+    counter = 0
+    for tweet in tweets:
+        try:
+            c_id = tweet['data']['id']
+            if counter >= skipper:
+                time.sleep(11)
+                client.tweet_reply(c_id, BIO_WEAPON)
+                print('success')
+                with open('mavx.log', 'a') as f:
+                    tweet_strip = tweet.text.replace('\n', '')
+                    f.write(f"{datetime.now()} POSTED MESSAGE TO {tweet_strip} WITH KEYWORD {kw}\n")
+            counter += 1
+        except Exception as E:
+
+            print(E)
+
+
+getTweetsByKeyword()
