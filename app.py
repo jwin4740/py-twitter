@@ -34,6 +34,7 @@ UserPinnedResponse = namedtuple("UserPinnedResponse", ("user_id", "username", "p
 MAVX_TEXT = f"Even as little as a $2 donation can help fund our clinical trial on the effect of Covid vaccines on human health.\n\nNo government agency will help with this study. We need YOUR help!!! Please donate and retweet.\n\nhttps://givesendgo.com/TheMavxerickStudy"
 BULLY_TEXT = f"Anyone who still wears a mask should be bullied, this is beyond ridiculous."
 BIO_WEAPON = f"We need to stop using the term \"vaccine\", this is a lipid nano particle encapsulated bioweapon"
+FOURTH_DOSE = f"Fourth dose of the bioweapon approved by FDA with ZERO data and regulatory insight"
 
 
 def select():
@@ -225,8 +226,9 @@ def getTweetsByKeyword():
         try:
             c_id = tweet['data']['id']
             if counter >= skipper:
-                time.sleep(11)
-                client.tweet_reply(c_id, BIO_WEAPON)
+                time.sleep(30)
+                # TODO: If 403 response too many times, exit program
+                client.tweet_reply(c_id, FOURTH_DOSE)
                 print('success')
                 with open('mavx.log', 'a') as f:
                     tweet_strip = tweet.text.replace('\n', '')
