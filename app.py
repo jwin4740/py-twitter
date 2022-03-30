@@ -1,11 +1,16 @@
+import sys
 from collections import namedtuple
 from typing import List, Tuple
+
+from tweepy import HTTPException
+
 from utils import *
 from datetime import datetime
 import time
 
 import tweepy
 from decouple import config
+import requests
 import json
 
 # cnx = mysql.connector.connect(user='scott', password='password',
@@ -28,6 +33,9 @@ VERITA_PINNED_TWEET_ID = '1504832968883322909'
 MAVX_USERNAME = 'ErickMavx'
 MAVX_USER_ID = 1507745273321242635
 MAVX_PINNED_TWEET_ID = '1507747124544512010'
+COUNTER_401 = 0
+COUNTER_403 = 0
+COUNTER_429 = 0
 
 UserPinnedResponse = namedtuple("UserPinnedResponse", ("user_id", "username", "pinned_tweet"))
 
@@ -35,33 +43,34 @@ MAVX_TEXT = f"Even as little as a $2 donation can help fund our clinical trial o
 BULLY_TEXT = f"Anyone who still wears a mask should be bullied, this is beyond ridiculous."
 BIO_WEAPON = f"We need to stop using the term \"vaccine\", this is a lipid nano particle encapsulated bioweapon"
 FOURTH_DOSE = f"Fourth dose of the bioweapon approved by FDA with ZERO data and regulatory insight"
+REMDESIVIR = f"Interesting, the Wuhan lab also developed REMDESIVIR; but definitely no connection to Gain-of-Fauci research"
 
 
 def select():
     return f"SELECT * FROM tweets WHERE used = False ORDER BY created_at ASC;"
 
 
-Conn = start_db(DB_HOST, DB_USER, DB_PASSWORD)
+# Conn = start_db(DB_HOST, DB_USER, DB_PASSWORD)
 
 
-def return_text_hashtags():
-    cursor = Conn.cursor()
-    cursor.execute(select())
+# def return_text_hashtags():
+#     cursor = Conn.cursor()
+#     cursor.execute(select())
+#
+#     tweet_list = []
+#     for x in cursor:
+#         tweet_list.append(x)
+#
+#     return tweet_list[0]
 
-    tweet_list = []
-    for x in cursor:
-        tweet_list.append(x)
 
-    return tweet_list[0]
-
-
-def mark_tweet_true(tweet_id):
-    print(tweet_id)
-    cursor = Conn.cursor()
-
-    cursor.execute(f"UPDATE tweets SET used = TRUE WHERE id = {tweet_id}")
-    Conn.commit()
-    cursor.close()
+# def mark_tweet_true(tweet_id):
+#     print(tweet_id)
+#     cursor = Conn.cursor()
+#
+#     cursor.execute(f"UPDATE tweets SET used = TRUE WHERE id = {tweet_id}")
+#     Conn.commit()
+#     cursor.close()
 
 
 class SimpleTwitter:
@@ -77,7 +86,7 @@ class SimpleTwitter:
             d = {'user_id': res.data.id, 'username': res.data.username, 'pinned_tweet': res.includes['tweets'][0]}
             print(d['pinned_tweet']['data']['id'])
         except Exception as E:
-            with open('mavx.log', 'a') as f:
+            with open('verita.log', 'a') as f:
 
                 f.write(f"{datetime.now()} error {E} fetching pinned tweet {username}\n")
 
@@ -94,14 +103,19 @@ class SimpleTwitter:
             final_text = tup[0]
             self.api.create_tweet(text=final_text)
             print('successfully created tweet')
-            mark_tweet_true(raw_text[0])
+            # mark_tweet_true(raw_text[0])
         except Exception as E:
             print(E)
 
     def tweet_reply(self, t_id, msg_text):
 
-        self.api.create_tweet(text=msg_text, in_reply_to_tweet_id=t_id)
-        print('successful reply tweet')
+        try:
+            self.api.create_tweet(text=msg_text, in_reply_to_tweet_id=t_id)
+
+        except HTTPException as E:
+            self.handle_exception(E)
+
+        print('successful reply to tweet')
 
     def get_followers(self, user_id=VERITA_USER_ID):
         next_token = True
@@ -124,12 +138,12 @@ class SimpleTwitter:
         try:
             self.api.create_tweet(text=raw_text, in_reply_to_tweet_id=pinned_id)
             print('successfully created tweet')
-            with open('mavx.log', 'a') as f:
+            with open('verita.log', 'a') as f:
                 text_strip = MAVX_TEXT.replace('\n', ' ')
                 f.write(f"{datetime.now()} POSTED {text_strip} TO {user_name}\n")
 
         except Exception as E:
-            with open('mavx.log', 'a') as f:
+            with open('verita.log', 'a') as f:
                 f.write(f"{datetime.now()} {E} POSTING TO {user_name}\n")
 
     def search_tweets_by_keyword(self, keyword):
@@ -138,8 +152,9 @@ class SimpleTwitter:
         pagination_token = None
         tweet_list = []
         max_tweets = 1000
-        while next_token is True:
 
+        while next_token is True:
+            time.sleep(0.5)
             res = self.api.search_recent_tweets(keyword, next_token=pagination_token)
             print('successfully fetched batch')
 
@@ -154,6 +169,31 @@ class SimpleTwitter:
                 next_token = False
                 print(E)
         return tweet_list
+
+    def handle_exception(self, exception: HTTPException):
+        if exception.response.status_code == 403:
+            global COUNTER_403
+            COUNTER_403 += 1
+            with open('verita.log', 'a') as f:
+                f.write(f"{datetime.now()} error {exception}\n")
+
+        if exception.response.status_code == 401:
+            global COUNTER_401
+            COUNTER_401 += 1
+
+            with open('verita.log', 'a') as f:
+                f.write(f"{datetime.now()} error {exception}\n")
+
+        if exception.response.status_code == 429:
+            with open('verita.log', 'a') as f:
+                f.write(f"{datetime.now()} error {exception} exiting...\n")
+            sys.exit(1)
+
+    def test_req(self):
+        try:
+            self.api.create_tweet(text='blobbb', in_reply_to_tweet_id=43434)
+        except HTTPException as E:
+            self.handle_exception(E)
 
     @staticmethod
     def create_tweet(raw_text: List) -> Tuple:
@@ -206,19 +246,18 @@ def execute():
                 continue
             pinned_tweet_id = res['pinned_tweet']['data']['id']
         except Exception as E:
-            with open('mavx.log', 'a') as f:
+            with open('verita.log', 'a') as f:
                 f.write(f"{datetime.now()} {E} POSTING TO {follow_data['username']}\n")
         try:
             time.sleep(3)
 
             client.tweet_pinned(BULLY_TEXT, pinned_tweet_id, follow_data['username'])
         except Exception as E:
-            with open('mavx.log', 'a') as f:
+            with open('verita.log', 'a') as f:
                 f.write(f"{datetime.now()} {E} POSTING TO {follow_data['username']}\n")
 
 
-def getTweetsByKeyword():
-    kw = 'vaccine'
+def get_tweets_by_keyword(kw: str, txt: str):
     tweets = client.search_tweets_by_keyword(kw)
     skipper = 0
     counter = 0
@@ -226,11 +265,16 @@ def getTweetsByKeyword():
         try:
             c_id = tweet['data']['id']
             if counter >= skipper:
-                time.sleep(30)
+                time.sleep(25)
                 # TODO: If 403 response too many times, exit program
-                client.tweet_reply(c_id, FOURTH_DOSE)
-                print('success')
-                with open('mavx.log', 'a') as f:
+                if COUNTER_401 < 3 or COUNTER_403 < 3:
+                    actual_text = txt + " " + str(counter)
+                    client.tweet_reply(c_id, actual_text)
+                else:
+                    with open('verita.log', 'a') as f:
+                        f.write(f"{datetime.now()} EXITED because of 401 or 403 excess\n")
+                    sys.exit(1)
+                with open('verita.log', 'a') as f:
                     tweet_strip = tweet.text.replace('\n', '')
                     f.write(f"{datetime.now()} POSTED MESSAGE TO {tweet_strip} WITH KEYWORD {kw}\n")
             counter += 1
@@ -239,4 +283,4 @@ def getTweetsByKeyword():
             print(E)
 
 
-getTweetsByKeyword()
+get_tweets_by_keyword('COVID19', REMDESIVIR)
