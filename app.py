@@ -265,7 +265,10 @@ def get_tweets_by_keyword(kw: str, txt: str):
         try:
             c_id = tweet['data']['id']
             if counter >= skipper:
-                time.sleep(25)
+                if counter < 25:
+                    time.sleep(3)
+                else:
+                    time.sleep(45)
                 # TODO: If 403 response too many times, exit program
                 if COUNTER_401 < 3 or COUNTER_403 < 3:
                     actual_text = txt + " " + str(counter)
